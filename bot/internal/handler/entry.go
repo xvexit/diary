@@ -405,10 +405,17 @@ func (h *EntryHandler) handleView(c tb.Context) error {
 		return c.Edit("❌ Запись не найдена.", tb.ModeHTML)
 	}
 
-	msg := fmt.Sprintf("<b>#%d</b>\n\n%s\n\n📅 <i>Создана: %s</i>\n🔄 <i>Изменена: %s</i>",
-		entry.ID, escapeHTML(entry.Content),
-		entry.CreatedAt.Format("02.01.2006 15:04"),
-		entry.UpdatedAt.Format("02.01.2006 15:04"))
+	var msg string
+	if entry.CreatedAt.Equal(entry.UpdatedAt) {
+		msg = fmt.Sprintf("<b>#%d</b>\n\n%s\n\n📅 <i>Создана: %s</i>",
+			entry.ID, escapeHTML(entry.Content),
+			entry.CreatedAt.Format("02.01.2006 15:04"))
+	} else {
+		msg = fmt.Sprintf("<b>#%d</b>\n\n%s\n\n📅 <i>Создана: %s</i>\n🔄 <i>Изменена: %s</i>",
+			entry.ID, escapeHTML(entry.Content),
+			entry.CreatedAt.Format("02.01.2006 15:04"),
+			entry.UpdatedAt.Format("02.01.2006 15:04"))
+	}
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
