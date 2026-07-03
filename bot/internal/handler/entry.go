@@ -13,7 +13,7 @@ import (
 	"github.com/user/dnevnik-bot/internal/state"
 )
 
-const pageSize = 5
+const pageSize = 10
 
 type EntryHandler struct {
 	svc         *service.EntryService
@@ -140,7 +140,8 @@ func (h *EntryHandler) showSearchResults(c tb.Context, uid int64, query string, 
 	rows = append(rows, navRow)
 
 	for _, e := range entries {
-		rows = append(rows, markup.Row(markup.Data(fmt.Sprintf("#%d 👁 Просмотр", e.ID), "view", strconv.Itoa(e.ID))))
+		label := firstWords(e.Content, 20) + " 📅 " + e.CreatedAt.Format("02.01")
+		rows = append(rows, markup.Row(markup.Data(label, "view", strconv.Itoa(e.ID))))
 	}
 	rows = append(rows, markup.Row(markup.Data("🔍 Снова", "search_start"), markup.Data("🏠 В меню", "menu")))
 
@@ -342,6 +343,14 @@ func (h *EntryHandler) handleNoop(c tb.Context) error {
 	return nil
 }
 
+func firstWords(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return string(runes)
+	}
+	return string(runes[:max]) + "..."
+}
+
 func (h *EntryHandler) handleList(c tb.Context) error {
 	uid := c.Sender().ID
 	page := parseInt(c.Data(), 1)
@@ -354,27 +363,15 @@ func (h *EntryHandler) handleList(c tb.Context) error {
 	markup := &tb.ReplyMarkup{}
 
 	if total == 0 {
-		btnNew := markup.Data("📝 Новая запись", "new")
-		btnMenu := markup.Data("🏠 В меню", "menu")
-		markup.Inline(markup.Row(btnNew), markup.Row(btnMenu))
+		markup.Inline(
+			markup.Row(markup.Data("📝 Новая запись", "new")),
+			markup.Row(markup.Data("🏠 В меню", "menu")),
+		)
 		return c.Edit("📋 <b>Мои записи</b>\n\nУ тебя пока нет записей. Напиши первую! ✍️", markup, tb.ModeHTML)
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
-
-	var b strings.Builder
-	b.WriteString("📋 <b>Мои записи</b>\n\n")
-	for _, e := range entries {
-		runes := []rune(e.Content)
-		preview := string(runes)
-		if len(runes) > 50 {
-			preview = string(runes[:50]) + "..."
-		}
-		b.WriteString(fmt.Sprintf("#%d 📅 %s — <i>%s</i>\n",
-			e.ID, e.CreatedAt.Format("02.01.2006"), escapeHTML(preview)))
-	}
-
-	msg := b.String()
+	msg := fmt.Sprintf("📋 <b>Мои записи</b>  %d/%d", page, totalPages)
 
 	var rows []tb.Row
 
@@ -389,13 +386,17 @@ func (h *EntryHandler) handleList(c tb.Context) error {
 	rows = append(rows, navRow)
 
 	for _, e := range entries {
-		rows = append(rows, markup.Row(markup.Data(fmt.Sprintf("#%d 👁 Просмотр", e.ID), "view", strconv.Itoa(e.ID))))
+		label := firstWords(e.Content, 20) + " 📅 " + e.CreatedAt.Format("02.01")
+		rows = append(rows, markup.Row(markup.Data(label, "view", strconv.Itoa(e.ID))))
 	}
 
-	rows = append(rows, markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🏠 В меню", "menu")))
+	rows = append(rows, markup.Row(
+		markup.Data("📝 Новая запись", "new"),
+		markup.Data("🔍 Поиск", "search_start"),
+		markup.Data("🏠 В меню", "menu"),
+	))
 
 	markup.Inline(rows...)
-
 	return c.Edit(msg, markup, tb.ModeHTML)
 }
 
