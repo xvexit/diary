@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -63,9 +65,20 @@ func main() {
 	}
 	log.Println("Connected to PostgreSQL")
 
+	httpClient := &http.Client{}
+	if proxyURL := os.Getenv("BOT_PROXY"); proxyURL != "" {
+		u, err := url.Parse(proxyURL)
+		if err != nil {
+			log.Fatalf("Invalid BOT_PROXY: %v", err)
+		}
+		httpClient.Transport = &http.Transport{Proxy: http.ProxyURL(u)}
+		log.Printf("Using proxy: %s", proxyURL)
+	}
+
 	bot, err := tb.NewBot(tb.Settings{
 		Token:  botToken,
 		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
+		Client: httpClient,
 	})
 	if err != nil {
 		log.Fatalf("Unable to create bot: %v", err)
