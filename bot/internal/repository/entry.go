@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/user/dnevnik-bot/internal/model"
@@ -13,8 +12,8 @@ type Entry interface {
 	GetByID(ctx context.Context, id int) (*model.Entry, error)
 	ListByUser(ctx context.Context, userID int64, limit, offset int) ([]*model.Entry, error)
 	CountByUser(ctx context.Context, userID int64) (int, error)
-	Update(ctx context.Context, id int, content string) error
-	Delete(ctx context.Context, id int) error
+	Update(ctx context.Context, id int, userID int64, content string) error
+	Delete(ctx context.Context, id int, userID int64) error
 	RandomByUser(ctx context.Context, userID int64) (*model.Entry, error)
 }
 
@@ -69,6 +68,9 @@ func (r *PgEntry) ListByUser(ctx context.Context, userID int64, limit, offset in
 		}
 		entries = append(entries, &e)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return entries, nil
 }
 
@@ -80,16 +82,16 @@ func (r *PgEntry) CountByUser(ctx context.Context, userID int64) (int, error) {
 	return count, err
 }
 
-func (r *PgEntry) Update(ctx context.Context, id int, content string) error {
+func (r *PgEntry) Update(ctx context.Context, id int, userID int64, content string) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE entries SET content = $1, updated_at = $2 WHERE id = $3`,
-		content, time.Now(), id,
+		`UPDATE entries SET content = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`,
+		content, id, userID,
 	)
 	return err
 }
 
-func (r *PgEntry) Delete(ctx context.Context, id int) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM entries WHERE id = $1`, id)
+func (r *PgEntry) Delete(ctx context.Context, id int, userID int64) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM entries WHERE id = $1 AND user_id = $2`, id, userID)
 	return err
 }
 

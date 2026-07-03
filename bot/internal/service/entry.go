@@ -67,7 +67,7 @@ func (s *EntryService) Update(ctx context.Context, userID int64, id int, content
 	if e.UserID != userID {
 		return ErrForbidden
 	}
-	return s.repo.Update(ctx, id, content)
+	return s.repo.Update(ctx, id, userID, content)
 }
 
 func (s *EntryService) Delete(ctx context.Context, userID int64, id int) error {
@@ -78,7 +78,7 @@ func (s *EntryService) Delete(ctx context.Context, userID int64, id int) error {
 	if e.UserID != userID {
 		return ErrForbidden
 	}
-	return s.repo.Delete(ctx, id)
+	return s.repo.Delete(ctx, id, userID)
 }
 
 func (s *EntryService) RandomByUser(ctx context.Context, userID int64) (*model.Entry, error) {
