@@ -15,6 +15,31 @@ import (
 	"github.com/user/dnevnik-bot/internal/state"
 )
 
+func startReminderScheduler(bot *tb.Bot, settingsRepo *repository.PgSettings) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now()
+		userIDs, err := settingsRepo.GetUsersDueForReminder(context.Background(), now)
+		if err != nil {
+			log.Printf("Reminder check error: %v", err)
+			continue
+		}
+
+		for _, uid := range userIDs {
+			markup := &tb.ReplyMarkup{}
+			markup.Inline(markup.Row(markup.Data("📝 Новая запись", "new")))
+			_, err := bot.Send(&tb.User{ID: uid},
+				"⏰ <b>Напоминание!</b>\n\nТы ещё не написал сегодня в дневник! 📝",
+				markup, tb.ModeHTML)
+			if err != nil {
+				log.Printf("Failed to send reminder to %d: %v", uid, err)
+			}
+		}
+	}
+}
+
 func main() {
 	botToken := os.Getenv("BOT_TOKEN")
 	if botToken == "" {
@@ -49,8 +74,12 @@ func main() {
 	stateManager := state.NewManager()
 	entryRepo := repository.NewPgEntry(pool)
 	entrySvc := service.NewEntryService(entryRepo)
-	entryHandler := handler.NewEntryHandler(entrySvc, stateManager, bot)
+	settingsRepo := repository.NewPgSettings(pool)
+	settingsSvc := service.NewSettingsService(settingsRepo)
+	entryHandler := handler.NewEntryHandler(entrySvc, settingsSvc, stateManager, bot)
 	entryHandler.Register()
+
+	go startReminderScheduler(bot, settingsRepo)
 
 	log.Println("Bot started!")
 	bot.Start()

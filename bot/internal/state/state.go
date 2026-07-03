@@ -8,6 +8,8 @@ const (
 	Idle State = iota
 	Creating
 	Editing
+	Searching
+	ChangingTime
 )
 
 type UserState struct {

@@ -81,6 +81,15 @@ func (s *EntryService) Delete(ctx context.Context, userID int64, id int) error {
 	return s.repo.Delete(ctx, id, userID)
 }
 
+func (s *EntryService) Search(ctx context.Context, userID int64, query string, page, pageSize int) ([]*model.Entry, int, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, 0, ErrEmptyContent
+	}
+	offset := (page - 1) * pageSize
+	return s.repo.Search(ctx, userID, query, pageSize, offset)
+}
+
 func (s *EntryService) RandomByUser(ctx context.Context, userID int64) (*model.Entry, error) {
 	return s.repo.RandomByUser(ctx, userID)
 }

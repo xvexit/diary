@@ -7,6 +7,7 @@ import (
 
 	tb "gopkg.in/telebot.v3"
 
+	"github.com/user/dnevnik-bot/internal/repository"
 	"github.com/user/dnevnik-bot/internal/service"
 	"github.com/user/dnevnik-bot/internal/state"
 )
@@ -14,16 +15,18 @@ import (
 const pageSize = 5
 
 type EntryHandler struct {
-	svc   *service.EntryService
-	state *state.Manager
-	bot   *tb.Bot
+	svc         *service.EntryService
+	settingsSvc *service.SettingsService
+	state       *state.Manager
+	bot         *tb.Bot
 }
 
-func NewEntryHandler(svc *service.EntryService, st *state.Manager, bot *tb.Bot) *EntryHandler {
+func NewEntryHandler(svc *service.EntryService, settingsSvc *service.SettingsService, st *state.Manager, bot *tb.Bot) *EntryHandler {
 	return &EntryHandler{
-		svc:   svc,
-		state: st,
-		bot:   bot,
+		svc:         svc,
+		settingsSvc: settingsSvc,
+		state:       st,
+		bot:         bot,
 	}
 }
 
@@ -53,9 +56,167 @@ func (h *EntryHandler) Register() {
 			return h.handleDeleteExec(c)
 		case strings.HasPrefix(data, "delete:"):
 			return h.handleDeleteConfirm(c)
+		case strings.HasPrefix(data, "search:"):
+			return h.handleSearchResults(c)
+		case data == "search":
+			return h.handleSearch(c)
+		case data == "settings":
+			return h.handleSettings(c)
+		case data == "toggle_reminder":
+			return h.handleToggleReminder(c)
+		case data == "change_time":
+			return h.handleChangeTime(c)
 		}
 		return nil
 	})
+}
+
+// ── Search ───────────────────────────────────────
+
+func (h *EntryHandler) handleSearch(c tb.Context) error {
+	uid := c.Sender().ID
+	h.state.Set(uid, &state.UserState{State: state.Searching})
+
+	markup := &tb.ReplyMarkup{}
+	markup.Inline(markup.Row(markup.Data("❌ Отмена", "cancel")))
+	return c.Edit("🔍 <b>Поиск</b>\n\nВведи слово или фразу для поиска по записям:", markup, tb.ModeHTML)
+}
+
+func (h *EntryHandler) performSearch(c tb.Context, query string) error {
+	uid := c.Sender().ID
+	h.state.Reset(uid)
+
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return c.Send("❌ Введи что-нибудь для поиска.", tb.ModeHTML)
+	}
+
+	h.state.Set(uid, &state.UserState{State: state.Idle})
+	return h.showSearchResults(c, uid, query, 1)
+}
+
+func (h *EntryHandler) handleSearchResults(c tb.Context) error {
+	uid := c.Sender().ID
+	var query string
+	var page int
+	fmt.Sscanf(c.Data(), "search:%s:%d", &query, &page)
+	if page < 1 {
+		page = 1
+	}
+	// rebuild query from data — scan splits on ':'
+	data := c.Data()
+	parts := strings.SplitN(data, ":", 3)
+	if len(parts) == 3 {
+		query = parts[1]
+		fmt.Sscanf(parts[2], "%d", &page)
+	}
+	return h.showSearchResults(c, uid, query, page)
+}
+
+func (h *EntryHandler) showSearchResults(c tb.Context, uid int64, query string, page int) error {
+	entries, total, err := h.svc.Search(context.Background(), uid, query, page, pageSize)
+	if err != nil {
+		return c.Edit("❌ Ошибка поиска.", tb.ModeHTML)
+	}
+
+	markup := &tb.ReplyMarkup{}
+
+	if len(entries) == 0 {
+		markup.Inline(
+			markup.Row(markup.Data("🔍 Снова", "search"), markup.Data("🏠 В меню", "menu")),
+		)
+		return c.Edit("🔍 <b>Поиск</b>\n\nНичего не найдено по запросу «<i>"+escapeHTML(query)+"</i>».", markup, tb.ModeHTML)
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("🔍 <b>Поиск: «%s»</b>\n\n", escapeHTML(query)))
+	for _, e := range entries {
+		runes := []rune(e.Content)
+		preview := string(runes)
+		if len(runes) > 50 {
+			preview = string(runes[:50]) + "..."
+		}
+		b.WriteString(fmt.Sprintf("#%d 📅 %s — <i>%s</i>\n",
+			e.ID, e.CreatedAt.Format("02.01.2006"), escapeHTML(preview)))
+	}
+	msg := b.String()
+
+	var rows []tb.Row
+
+	var navRow []tb.Btn
+	if page > 1 {
+		navRow = append(navRow, markup.Data("◀️", fmt.Sprintf("search:%s:%d", query, page-1)))
+	}
+	navRow = append(navRow, markup.Data(fmt.Sprintf("%d/%d", page, totalPages), "noop"))
+	if page < totalPages {
+		navRow = append(navRow, markup.Data("▶️", fmt.Sprintf("search:%s:%d", query, page+1)))
+	}
+	rows = append(rows, navRow)
+
+	for _, e := range entries {
+		rows = append(rows, markup.Row(markup.Data(fmt.Sprintf("#%d 👁 Просмотр", e.ID), fmt.Sprintf("view:%d", e.ID))))
+	}
+	rows = append(rows, markup.Row(markup.Data("🔍 Снова", "search"), markup.Data("🏠 В меню", "menu")))
+
+	markup.Inline(rows...)
+	return c.Edit(msg, markup, tb.ModeHTML)
+}
+
+// ── Settings ──────────────────────────────────────
+
+func (h *EntryHandler) handleSettings(c tb.Context) error {
+	uid := c.Sender().ID
+	h.state.Reset(uid)
+
+	settings, err := h.settingsSvc.Get(context.Background(), uid)
+	if err != nil {
+		_ = h.settingsSvc.Upsert(context.Background(), uid)
+		settings = &repository.UserSettings{
+			UserID:          uid,
+			ReminderEnabled: true,
+			ReminderTime:    "21:00",
+		}
+	}
+
+	status := "✅ Включены"
+	if !settings.ReminderEnabled {
+		status = "❌ Выключены"
+	}
+
+	markup := &tb.ReplyMarkup{}
+	markup.Inline(
+		markup.Row(markup.Data("🔄 Вкл/Выкл", "toggle_reminder")),
+		markup.Row(markup.Data("⏰ Сменить время", "change_time")),
+		markup.Row(markup.Data("🏠 В меню", "menu")),
+	)
+
+	msg := fmt.Sprintf(
+		"⚙️ <b>Настройки</b>\n\n📅 <b>Напоминание:</b> %s\n⏰ <b>Время:</b> <i>%s</i>",
+		status, escapeHTML(settings.ReminderTime),
+	)
+
+	return c.Edit(msg, markup, tb.ModeHTML)
+}
+
+func (h *EntryHandler) handleToggleReminder(c tb.Context) error {
+	uid := c.Sender().ID
+	err := h.settingsSvc.ToggleReminder(context.Background(), uid)
+	if err != nil {
+		return c.Edit("❌ Ошибка.", tb.ModeHTML)
+	}
+
+	return h.handleSettings(c)
+}
+
+func (h *EntryHandler) handleChangeTime(c tb.Context) error {
+	uid := c.Sender().ID
+	h.state.Set(uid, &state.UserState{State: state.ChangingTime})
+
+	markup := &tb.ReplyMarkup{}
+	markup.Inline(markup.Row(markup.Data("❌ Отмена", "cancel")))
+	return c.Edit("⏰ <b>Новое время</b>\n\nВведи время в формате <b>HH:MM</b> (например 21:00):", markup, tb.ModeHTML)
 }
 
 func parsePage(data string) int {
@@ -77,13 +238,14 @@ func escapeHTML(s string) string {
 func (h *EntryHandler) handleStart(c tb.Context) error {
 	h.state.Reset(c.Sender().ID)
 
-	msg := "📔 <b>Дневник</b>\n\nТвой личный дневник в Telegram. Пиши записи, смотри их с удобной навигацией."
+	msg := "📔 <b>Дневник</b>\n\nТвой личный дневник в Telegram. Пиши записи, ищи их и получай напоминания."
 
 	markup := &tb.ReplyMarkup{}
-	btnNew := markup.Data("📝 Новая запись", "new")
-	btnList := markup.Data("📋 Мои записи", "list:1")
-	btnRandom := markup.Data("🎲 Сюрприз", "random")
-	markup.Inline(markup.Row(btnNew), markup.Row(btnList), markup.Row(btnRandom))
+	markup.Inline(
+		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🔍 Поиск", "search")),
+		markup.Row(markup.Data("📋 Мои записи", "list:1"), markup.Data("🎲 Сюрприз", "random")),
+		markup.Row(markup.Data("⚙️ Настройки", "settings")),
+	)
 
 	return c.Send(msg, markup, tb.ModeHTML)
 }
@@ -129,6 +291,21 @@ func (h *EntryHandler) handleText(c tb.Context) error {
 
 		return c.Send("✅ Запись обновлена!", markup, tb.ModeHTML)
 
+	case state.Searching:
+		return h.performSearch(c, c.Text())
+
+	case state.ChangingTime:
+		t := strings.TrimSpace(c.Text())
+		err := h.settingsSvc.SetReminderTime(context.Background(), uid, t)
+		if err != nil {
+			return c.Send("❌ "+err.Error(), tb.ModeHTML)
+		}
+		h.state.Reset(uid)
+
+		markup := &tb.ReplyMarkup{}
+		markup.Inline(markup.Row(markup.Data("⚙️ Настройки", "settings"), markup.Data("🏠 В меню", "menu")))
+		return c.Send("✅ Время напоминания установлено на <b>"+escapeHTML(t)+"</b>", markup, tb.ModeHTML)
+
 	default:
 		return c.Send("❌ Непонятная команда. Используй /start.", tb.ModeHTML)
 	}
@@ -160,12 +337,13 @@ func (h *EntryHandler) handleMenu(c tb.Context) error {
 	h.state.Reset(c.Sender().ID)
 
 	markup := &tb.ReplyMarkup{}
-	btnNew := markup.Data("📝 Новая запись", "new")
-	btnList := markup.Data("📋 Мои записи", "list:1")
-	btnRandom := markup.Data("🎲 Сюрприз", "random")
-	markup.Inline(markup.Row(btnNew), markup.Row(btnList), markup.Row(btnRandom))
+	markup.Inline(
+		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🔍 Поиск", "search")),
+		markup.Row(markup.Data("📋 Мои записи", "list:1"), markup.Data("🎲 Сюрприз", "random")),
+		markup.Row(markup.Data("⚙️ Настройки", "settings")),
+	)
 
-	return c.Edit("📔 <b>Дневник</b>\n\nТвой личный дневник в Telegram. Пиши записи, смотри их с удобной навигацией.", markup, tb.ModeHTML)
+	return c.Edit("📔 <b>Дневник</b>\n\nТвой личный дневник в Telegram. Пиши записи, ищи их и получай напоминания.", markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) handleNoop(c tb.Context) error {
