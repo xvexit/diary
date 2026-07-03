@@ -34,6 +34,7 @@ func (h *EntryHandler) Register() {
 	h.bot.Handle("/start", h.handleStart)
 	h.bot.Handle(tb.OnText, h.handleText)
 	h.bot.Handle(tb.OnCallback, func(c tb.Context) error {
+		c.Respond() // always acknowledge callback to stop button loading
 		data := c.Data()
 		switch {
 		case data == "new":
@@ -347,7 +348,7 @@ func (h *EntryHandler) handleMenu(c tb.Context) error {
 }
 
 func (h *EntryHandler) handleNoop(c tb.Context) error {
-	return c.Respond()
+	return nil
 }
 
 func (h *EntryHandler) handleList(c tb.Context) error {
