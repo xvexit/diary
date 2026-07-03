@@ -34,41 +34,40 @@ func (h *EntryHandler) Register() {
 	h.bot.Handle("/start", h.handleStart)
 	h.bot.Handle(tb.OnText, h.handleText)
 	h.bot.Handle(tb.OnCallback, func(c tb.Context) error {
-		c.Respond() // always acknowledge callback to stop button loading
 		data := c.Data()
 		switch {
 		case data == "new":
-			return h.handleNewEntry(c)
+			return h.answer(c, h.handleNewEntry(c))
 		case data == "cancel":
-			return h.handleCancel(c)
+			return h.answer(c, h.handleCancel(c))
 		case data == "menu":
-			return h.handleMenu(c)
+			return h.answer(c, h.handleMenu(c))
 		case data == "noop":
-			return h.handleNoop(c)
+			return h.answer(c, h.handleNoop(c))
 		case data == "random":
-			return h.handleRandom(c)
+			return h.answer(c, h.handleRandom(c))
 		case strings.HasPrefix(data, "list:"):
-			return h.handleList(c)
+			return h.answer(c, h.handleList(c))
 		case strings.HasPrefix(data, "view:"):
-			return h.handleView(c)
+			return h.answer(c, h.handleView(c))
 		case strings.HasPrefix(data, "edit:"):
-			return h.handleEdit(c)
+			return h.answer(c, h.handleEdit(c))
 		case strings.HasPrefix(data, "delete_yes:"):
-			return h.handleDeleteExec(c)
+			return h.answer(c, h.handleDeleteExec(c))
 		case strings.HasPrefix(data, "delete:"):
-			return h.handleDeleteConfirm(c)
+			return h.answer(c, h.handleDeleteConfirm(c))
 		case strings.HasPrefix(data, "search:"):
-			return h.handleSearchResults(c)
+			return h.answer(c, h.handleSearchResults(c))
 		case data == "search":
-			return h.handleSearch(c)
+			return h.answer(c, h.handleSearch(c))
 		case data == "settings":
-			return h.handleSettings(c)
+			return h.answer(c, h.handleSettings(c))
 		case data == "toggle_reminder":
-			return h.handleToggleReminder(c)
+			return h.answer(c, h.handleToggleReminder(c))
 		case data == "change_time":
-			return h.handleChangeTime(c)
+			return h.answer(c, h.handleChangeTime(c))
 		}
-		return nil
+		return h.answer(c, nil)
 	})
 }
 
@@ -345,6 +344,11 @@ func (h *EntryHandler) handleMenu(c tb.Context) error {
 	)
 
 	return c.Edit("📔 <b>Дневник</b>\n\nТвой личный дневник в Telegram. Пиши записи, ищи их и получай напоминания.", markup, tb.ModeHTML)
+}
+
+func (h *EntryHandler) answer(c tb.Context, err error) error {
+	c.Respond(&tb.CallbackResponse{})
+	return err
 }
 
 func (h *EntryHandler) handleNoop(c tb.Context) error {
