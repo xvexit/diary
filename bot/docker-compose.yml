@@ -30,15 +30,14 @@ services:
 
   bot:
     build: .
+    network_mode: "host"
     depends_on:
       migrations:
         condition: service_completed_successfully
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       BOT_TOKEN: ${BOT_TOKEN}
-      DATABASE_URL: postgres://postgres:postgres@db:5432/dnevnik?sslmode=disable
-      BOT_PROXY: http://host.docker.internal:12334
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/dnevnik?sslmode=disable
+      BOT_PROXY: http://127.0.0.1:12334
     restart: unless-stopped
 
 volumes:
