@@ -65,8 +65,8 @@ func (h *EntryHandler) handleSearch(c tb.Context) error {
 	h.state.Set(uid, &state.UserState{State: state.Searching})
 
 	markup := &tb.ReplyMarkup{}
-	markup.Inline(markup.Row(markup.Data("❌ Отмена", "cancel")))
-	return c.Edit("🔍 <b>Поиск</b>\n\nВведи слово или фразу для поиска по записям:", markup, tb.ModeHTML)
+	markup.Inline(markup.Row(markup.Data("❌ отмена", "cancel")))
+	return c.Edit("🔍 <b>поиск</b>\n\nвведи слово или фразу для поиска по записям:", markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) performSearch(c tb.Context, query string) error {
@@ -75,14 +75,14 @@ func (h *EntryHandler) performSearch(c tb.Context, query string) error {
 
 	query = strings.TrimSpace(query)
 	if query == "" {
-		return c.Send("❌ Введи что-нибудь для поиска.", tb.ModeHTML)
+		return c.Send("❌ введи что-нибудь для поиска.", tb.ModeHTML)
 	}
 
 	h.state.Set(uid, &state.UserState{State: state.Idle})
 
 	msg, markup, err := h.buildSearchResults(uid, query, 1)
 	if err != nil {
-		return c.Send("❌ Ошибка поиска.", tb.ModeHTML)
+		return c.Send("❌ ошибка поиска.", tb.ModeHTML)
 	}
 	return c.Send(msg, markup, tb.ModeHTML)
 }
@@ -102,7 +102,7 @@ func (h *EntryHandler) handleSearchResults(c tb.Context) error {
 
 	msg, markup, err := h.buildSearchResults(uid, query, page)
 	if err != nil {
-		return c.Edit("❌ Ошибка поиска.", tb.ModeHTML)
+		return c.Edit("❌ ошибка поиска.", tb.ModeHTML)
 	}
 	return c.Edit(msg, markup, tb.ModeHTML)
 }
@@ -117,13 +117,13 @@ func (h *EntryHandler) buildSearchResults(uid int64, query string, page int) (st
 
 	if len(entries) == 0 {
 		markup.Inline(
-			markup.Row(markup.Data("🔍 Снова", "search_start"), markup.Data("🏠 В меню", "menu")),
+			markup.Row(markup.Data("🔍 снова", "search_start"), markup.Data("🏠 в меню", "menu")),
 		)
-		return "🔍 <b>Поиск</b>\n\nНичего не найдено по запросу «<i>" + escapeHTML(query) + "</i>».", markup, nil
+		return "🔍 <b>поиск</b>\n\nничего не найдено по запросу «<i>" + escapeHTML(query) + "</i>».", markup, nil
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
-	msg := fmt.Sprintf("🔍 <b>Поиск: «%s»</b>  %d/%d", escapeHTML(query), page, totalPages)
+	msg := fmt.Sprintf("🔍 <b>поиск: «%s»</b>  %d/%d", escapeHTML(query), page, totalPages)
 
 	var rows []tb.Row
 
@@ -141,7 +141,7 @@ func (h *EntryHandler) buildSearchResults(uid int64, query string, page int) (st
 		label := firstWords(e.Content, 20) + " 📅 " + e.CreatedAt.Format("02.01")
 		rows = append(rows, markup.Row(markup.Data(label, "view", strconv.Itoa(e.ID))))
 	}
-	rows = append(rows, markup.Row(markup.Data("🔍 Снова", "search_start"), markup.Data("🏠 В меню", "menu")))
+	rows = append(rows, markup.Row(markup.Data("🔍 снова", "search_start"), markup.Data("🏠 в меню", "menu")))
 
 	markup.Inline(rows...)
 	return msg, markup, nil
@@ -163,20 +163,20 @@ func (h *EntryHandler) handleSettings(c tb.Context) error {
 		}
 	}
 
-	status := "✅ Включены"
+	status := "✅ включены"
 	if !settings.ReminderEnabled {
-		status = "❌ Выключены"
+		status = "❌ выключены"
 	}
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
 		markup.Row(markup.Data("🔄 Вкл/Выкл", "toggle_reminder")),
-		markup.Row(markup.Data("⏰ Сменить время", "change_time")),
-		markup.Row(markup.Data("🏠 В меню", "menu")),
+		markup.Row(markup.Data("⏰ сменить время", "change_time")),
+		markup.Row(markup.Data("🏠 в меню", "menu")),
 	)
 
 	msg := fmt.Sprintf(
-		"⚙️ <b>Настройки</b>\n\n📅 <b>Напоминание:</b> %s\n⏰ <b>Время:</b> <i>%s</i>",
+		"⚙️ <b>настройки</b>\n\n📅 <b>напоминание:</b> %s\n⏰ <b>время:</b> <i>%s</i>",
 		status, escapeHTML(settings.ReminderTime),
 	)
 
@@ -187,7 +187,7 @@ func (h *EntryHandler) handleToggleReminder(c tb.Context) error {
 	uid := c.Sender().ID
 	err := h.settingsSvc.ToggleReminder(context.Background(), uid)
 	if err != nil {
-		return c.Edit("❌ Ошибка.", tb.ModeHTML)
+		return c.Edit("❌ ошибка.", tb.ModeHTML)
 	}
 
 	return h.handleSettings(c)
@@ -198,8 +198,8 @@ func (h *EntryHandler) handleChangeTime(c tb.Context) error {
 	h.state.Set(uid, &state.UserState{State: state.ChangingTime})
 
 	markup := &tb.ReplyMarkup{}
-	markup.Inline(markup.Row(markup.Data("❌ Отмена", "cancel")))
-	return c.Edit("⏰ <b>Новое время</b>\n\nВведи время в формате <b>HH:MM</b> (например 21:00):", markup, tb.ModeHTML)
+	markup.Inline(markup.Row(markup.Data("❌ отмена", "cancel")))
+	return c.Edit("⏰ <b>новое время</b>\n\nвведи время в формате <b>HH:MM</b> (например 21:00):", markup, tb.ModeHTML)
 }
 
 func parseInt(data string, defaultVal int) int {
@@ -220,12 +220,12 @@ func escapeHTML(s string) string {
 func (h *EntryHandler) handleStart(c tb.Context) error {
 	h.state.Reset(c.Sender().ID)
 
-	msg := "📔 <b>Дневник</b>\n\nТвой личный дневник в Telegram. Пиши записи, ищи их и получай напоминания."
+	msg := "📔 <b>дневник</b>\n\nтвой личный дневник в telegram. пиши записи, ищи их и получай напоминания."
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
-		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🎲 Сюрприз", "random")),
-		markup.Row(markup.Data("📋 Мои записи", "list", "1"), markup.Data("⚙️ Настройки", "settings")),
+		markup.Row(markup.Data("📝 новая запись", "new"), markup.Data("🎲 сюрприз", "random")),
+		markup.Row(markup.Data("📋 мои записи", "list", "1"), markup.Data("⚙️ настройки", "settings")),
 	)
 
 	return c.Send(msg, markup, tb.ModeHTML)
@@ -239,38 +239,38 @@ func (h *EntryHandler) handleText(c tb.Context) error {
 	case state.Creating:
 		content := strings.TrimSpace(c.Text())
 		if content == "" {
-			return c.Send("❌ Запись не может быть пустой.", tb.ModeHTML)
+			return c.Send("❌ запись не может быть пустой.", tb.ModeHTML)
 		}
 		entry, err := h.svc.Create(context.Background(), uid, content)
 		if err != nil {
-			return c.Send("❌ Ошибка при сохранении: "+err.Error(), tb.ModeHTML)
+			return c.Send("❌ ошибка при сохранении: "+err.Error(), tb.ModeHTML)
 		}
 		h.state.Reset(uid)
 
 		markup := &tb.ReplyMarkup{}
 		markup.Inline(
-			markup.Row(markup.Data("📋 К списку", "list", "1"), markup.Data("🏠 В меню", "menu")),
+			markup.Row(markup.Data("📋 к списку", "list", "1"), markup.Data("🏠 в меню", "menu")),
 		)
 
-		return c.Send(fmt.Sprintf("✅ Запись #%d сохранена!", entry.ID), markup, tb.ModeHTML)
+		return c.Send(fmt.Sprintf("✅ запись #%d сохранена!", entry.ID), markup, tb.ModeHTML)
 
 	case state.Editing:
 		content := strings.TrimSpace(c.Text())
 		if content == "" {
-			return c.Send("❌ Запись не может быть пустой.", tb.ModeHTML)
+			return c.Send("❌ запись не может быть пустой.", tb.ModeHTML)
 		}
 		err := h.svc.Update(context.Background(), uid, us.EditEntryID, content)
 		if err != nil {
-			return c.Send("❌ Ошибка при обновлении: "+err.Error(), tb.ModeHTML)
+			return c.Send("❌ ошибка при обновлении: "+err.Error(), tb.ModeHTML)
 		}
 		h.state.Reset(uid)
 
 		markup := &tb.ReplyMarkup{}
 		markup.Inline(
-			markup.Row(markup.Data("📋 К списку", "list", "1"), markup.Data("🏠 В меню", "menu")),
+			markup.Row(markup.Data("📋 к списку", "list", "1"), markup.Data("🏠 в меню", "menu")),
 		)
 
-		return c.Send("✅ Запись обновлена!", markup, tb.ModeHTML)
+		return c.Send("✅ запись обновлена!", markup, tb.ModeHTML)
 
 	case state.Searching:
 		return h.performSearch(c, c.Text())
@@ -284,11 +284,11 @@ func (h *EntryHandler) handleText(c tb.Context) error {
 		h.state.Reset(uid)
 
 		markup := &tb.ReplyMarkup{}
-		markup.Inline(markup.Row(markup.Data("⚙️ Настройки", "settings"), markup.Data("🏠 В меню", "menu")))
-		return c.Send("✅ Время напоминания установлено на <b>"+escapeHTML(t)+"</b>", markup, tb.ModeHTML)
+		markup.Inline(markup.Row(markup.Data("⚙️ настройки", "settings"), markup.Data("🏠 в меню", "menu")))
+		return c.Send("✅ время напоминания установлено на <b>"+escapeHTML(t)+"</b>", markup, tb.ModeHTML)
 
 	default:
-		return c.Send("❌ Непонятная команда. Используй /start.", tb.ModeHTML)
+		return c.Send("❌ непонятная команда. используй /start.", tb.ModeHTML)
 	}
 }
 
@@ -297,10 +297,10 @@ func (h *EntryHandler) handleNewEntry(c tb.Context) error {
 	h.state.Set(uid, &state.UserState{State: state.Creating})
 
 	markup := &tb.ReplyMarkup{}
-	btnCancel := markup.Data("❌ Отмена", "cancel")
+	btnCancel := markup.Data("❌ отмена", "cancel")
 	markup.Inline(markup.Row(btnCancel))
 
-	return c.Edit("✍️ <b>Напиши свою запись:</b>", markup, tb.ModeHTML)
+	return c.Edit("✍️ <b>напиши свою запись:</b>", markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) handleCancel(c tb.Context) error {
@@ -308,10 +308,10 @@ func (h *EntryHandler) handleCancel(c tb.Context) error {
 	h.state.Reset(uid)
 
 	markup := &tb.ReplyMarkup{}
-	btnMenu := markup.Data("🏠 В меню", "menu")
+	btnMenu := markup.Data("🏠 в меню", "menu")
 	markup.Inline(markup.Row(btnMenu))
 
-	return c.Edit("❌ Отменено.", markup, tb.ModeHTML)
+	return c.Edit("❌ отменено.", markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) handleMenu(c tb.Context) error {
@@ -319,11 +319,11 @@ func (h *EntryHandler) handleMenu(c tb.Context) error {
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
-		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🎲 Сюрприз", "random")),
-		markup.Row(markup.Data("📋 Мои записи", "list", "1"), markup.Data("⚙️ Настройки", "settings")),
+		markup.Row(markup.Data("📝 новая запись", "new"), markup.Data("🎲 сюрприз", "random")),
+		markup.Row(markup.Data("📋 мои записи", "list", "1"), markup.Data("⚙️ настройки", "settings")),
 	)
 
-	return c.Edit("📔 <b>Дневник</b>\n\nТвой личный дневник в Telegram. Пиши записи, ищи их и получай напоминания.", markup, tb.ModeHTML)
+	return c.Edit("📔 <b>дневник</b>\n\nтвой личный дневник в telegram. пиши записи, ищи их и получай напоминания.", markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) answer(c tb.Context, err error) error {
@@ -353,17 +353,17 @@ func (h *EntryHandler) handleList(c tb.Context) error {
 
 	entries, total, err := h.svc.ListByUser(context.Background(), uid, page, pageSize)
 	if err != nil {
-		return c.Edit("❌ Ошибка загрузки записей.", tb.ModeHTML)
+		return c.Edit("❌ ошибка загрузки записей.", tb.ModeHTML)
 	}
 
 	markup := &tb.ReplyMarkup{}
 
 	if total == 0 {
 		markup.Inline(
-			markup.Row(markup.Data("📝 Новая запись", "new")),
-			markup.Row(markup.Data("🏠 В меню", "menu")),
+			markup.Row(markup.Data("📝 новая запись", "new")),
+			markup.Row(markup.Data("🏠 в меню", "menu")),
 		)
-		return c.Edit("📋 <b>Мои записи</b>\n\nУ тебя пока нет записей. Напиши первую! ✍️", markup, tb.ModeHTML)
+		return c.Edit("📋 <b>Мои записи</b>\n\nу тебя пока нет записей. напиши первую! ✍️", markup, tb.ModeHTML)
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
@@ -387,9 +387,9 @@ func (h *EntryHandler) handleList(c tb.Context) error {
 	}
 
 	rows = append(rows, markup.Row(
-		markup.Data("📝 Новая запись", "new"),
-		markup.Data("🔍 Поиск", "search_start"),
-		markup.Data("🏠 В меню", "menu"),
+		markup.Data("📝 новая запись", "new"),
+		markup.Data("🔍 поиск", "search_start"),
+		markup.Data("🏠 в меню", "menu"),
 	))
 
 	markup.Inline(rows...)
@@ -402,16 +402,16 @@ func (h *EntryHandler) handleView(c tb.Context) error {
 
 	entry, err := h.svc.GetByID(context.Background(), uid, id)
 	if err != nil {
-		return c.Edit("❌ Запись не найдена.", tb.ModeHTML)
+		return c.Edit("❌ запись не найдена.", tb.ModeHTML)
 	}
 
 	var msg string
 	if entry.CreatedAt.Equal(entry.UpdatedAt) {
-		msg = fmt.Sprintf("<b>#%d</b>\n\n%s\n\n📅 <i>Создана: %s</i>",
+		msg = fmt.Sprintf("<b>#%d</b>\n\n%s\n\n📅 <i>создана: %s</i>",
 			entry.ID, escapeHTML(entry.Content),
 			entry.CreatedAt.Format("02.01.2006 15:04"))
 	} else {
-		msg = fmt.Sprintf("<b>#%d</b>\n\n%s\n\n📅 <i>Создана: %s</i>\n🔄 <i>Изменена: %s</i>",
+		msg = fmt.Sprintf("<b>#%d</b>\n\n%s\n\n📅 <i>создана: %s</i>\n🔄 <i>изменена: %s</i>",
 			entry.ID, escapeHTML(entry.Content),
 			entry.CreatedAt.Format("02.01.2006 15:04"),
 			entry.UpdatedAt.Format("02.01.2006 15:04"))
@@ -420,12 +420,12 @@ func (h *EntryHandler) handleView(c tb.Context) error {
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
 		markup.Row(
-			markup.Data("✏️ Редактировать", "edit", strconv.Itoa(entry.ID)),
-			markup.Data("🗑 Удалить", "delete", strconv.Itoa(entry.ID)),
+			markup.Data("✏️ редактировать", "edit", strconv.Itoa(entry.ID)),
+			markup.Data("🗑 удалить", "delete", strconv.Itoa(entry.ID)),
 		),
 		markup.Row(
-			markup.Data("⬅️ Назад", "list", "1"),
-			markup.Data("🏠 В меню", "menu"),
+			markup.Data("⬅️ назад", "list", "1"),
+			markup.Data("🏠 в меню", "menu"),
 		),
 	)
 
@@ -438,16 +438,16 @@ func (h *EntryHandler) handleEdit(c tb.Context) error {
 
 	entry, err := h.svc.GetByID(context.Background(), uid, id)
 	if err != nil {
-		return c.Edit("❌ Запись не найдена.", tb.ModeHTML)
+		return c.Edit("❌ запись не найдена.", tb.ModeHTML)
 	}
 
 	h.state.Set(uid, &state.UserState{State: state.Editing, EditEntryID: id})
 
 	markup := &tb.ReplyMarkup{}
-	btnCancel := markup.Data("❌ Отмена", "cancel")
+	btnCancel := markup.Data("❌ отмена", "cancel")
 	markup.Inline(markup.Row(btnCancel))
 
-	msg := fmt.Sprintf("✏️ <b>Редактирование #%d</b>\n\n<code>%s</code>\n\n<i>Нажми на текст выше, скопируй, исправь и отправь обратно:</i>",
+	msg := fmt.Sprintf("✏️ <b>редактирование #%d</b>\n\n<code>%s</code>\n\n<i>для редактирования записи нажми на текст выше вставь в поле ввода и отправляй</i>",
 		entry.ID, escapeHTML(entry.Content))
 
 	return c.Edit(msg, markup, tb.ModeHTML)
@@ -459,12 +459,12 @@ func (h *EntryHandler) handleDeleteConfirm(c tb.Context) error {
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
 		markup.Row(
-			markup.Data("✅ Да, удалить", "delete_yes", strconv.Itoa(id)),
-			markup.Data("❌ Нет", "list", "1"),
+			markup.Data("✅ да, удалить", "delete_yes", strconv.Itoa(id)),
+			markup.Data("❌ нет", "list", "1"),
 		),
 	)
 
-	return c.Edit("🗑 <b>Точно удалить?</b>", markup, tb.ModeHTML)
+	return c.Edit("🗑 <b>точно удалить?</b>", markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) handleDeleteExec(c tb.Context) error {
@@ -473,15 +473,15 @@ func (h *EntryHandler) handleDeleteExec(c tb.Context) error {
 
 	err := h.svc.Delete(context.Background(), uid, id)
 	if err != nil {
-		return c.Edit("❌ Ошибка при удалении: "+err.Error(), tb.ModeHTML)
+		return c.Edit("❌ ошибка при удалении: "+err.Error(), tb.ModeHTML)
 	}
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
-		markup.Row(markup.Data("📋 К списку", "list", "1"), markup.Data("🏠 В меню", "menu")),
+		markup.Row(markup.Data("📋 к списку", "list", "1"), markup.Data("🏠 в меню", "menu")),
 	)
 
-	return c.Edit("🗑 Запись удалена.", markup, tb.ModeHTML)
+	return c.Edit("🗑 запись удалена.", markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) handleRandom(c tb.Context) error {
@@ -489,18 +489,18 @@ func (h *EntryHandler) handleRandom(c tb.Context) error {
 
 	entry, err := h.svc.RandomByUser(context.Background(), uid)
 	if err != nil {
-		return c.Edit("❌ У тебя пока нет записей.", tb.ModeHTML)
+		return c.Edit("❌ у тебя пока нет записей.", tb.ModeHTML)
 	}
 
-	msg := fmt.Sprintf("🎲 <b>Случайная запись #%d</b>\n\n%s\n\n📅 <i>%s</i>",
+	msg := fmt.Sprintf("🎲 <b>случайная запись #%d</b>\n\n%s\n\n📅 <i>%s</i>",
 		entry.ID, escapeHTML(entry.Content), entry.CreatedAt.Format("02.01.2006 15:04"))
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
 		markup.Row(
-			markup.Data("👁 Просмотр", "view", strconv.Itoa(entry.ID)),
-			markup.Data("🎲 Ещё", "random"),
-			markup.Data("🏠 В меню", "menu"),
+			markup.Data("👁 просмотр", "view", strconv.Itoa(entry.ID)),
+			markup.Data("🎲 ещё", "random"),
+			markup.Data("🏠 в меню", "menu"),
 		),
 	)
 
