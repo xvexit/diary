@@ -447,7 +447,7 @@ func (h *EntryHandler) handleEdit(c tb.Context) error {
 	btnCancel := markup.Data("❌ Отмена", "cancel")
 	markup.Inline(markup.Row(btnCancel))
 
-	msg := fmt.Sprintf("✏️ <b>Редактирование #%d</b>\n\n<i>Текущий текст:</i>\n%s\n\nОтправь новый текст:",
+	msg := fmt.Sprintf("✏️ <b>Редактирование #%d</b>\n\n<code>%s</code>\n\n<i>Нажми на текст выше, скопируй, исправь и отправь обратно:</i>",
 		entry.ID, escapeHTML(entry.Content))
 
 	return c.Edit(msg, markup, tb.ModeHTML)
