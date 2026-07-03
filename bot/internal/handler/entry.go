@@ -79,7 +79,12 @@ func (h *EntryHandler) performSearch(c tb.Context, query string) error {
 	}
 
 	h.state.Set(uid, &state.UserState{State: state.Idle})
-	return h.showSearchResults(c, uid, query, 1)
+
+	msg, markup, err := h.buildSearchResults(uid, query, 1)
+	if err != nil {
+		return c.Send("❌ Ошибка поиска.", tb.ModeHTML)
+	}
+	return c.Send(msg, markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) handleSearchResults(c tb.Context) error {
@@ -94,13 +99,18 @@ func (h *EntryHandler) handleSearchResults(c tb.Context) error {
 			page = 1
 		}
 	}
-	return h.showSearchResults(c, uid, query, page)
-}
 
-func (h *EntryHandler) showSearchResults(c tb.Context, uid int64, query string, page int) error {
-	entries, total, err := h.svc.Search(context.Background(), uid, query, page, pageSize)
+	msg, markup, err := h.buildSearchResults(uid, query, page)
 	if err != nil {
 		return c.Edit("❌ Ошибка поиска.", tb.ModeHTML)
+	}
+	return c.Edit(msg, markup, tb.ModeHTML)
+}
+
+func (h *EntryHandler) buildSearchResults(uid int64, query string, page int) (string, *tb.ReplyMarkup, error) {
+	entries, total, err := h.svc.Search(context.Background(), uid, query, page, pageSize)
+	if err != nil {
+		return "", nil, err
 	}
 
 	markup := &tb.ReplyMarkup{}
@@ -109,23 +119,11 @@ func (h *EntryHandler) showSearchResults(c tb.Context, uid int64, query string, 
 		markup.Inline(
 			markup.Row(markup.Data("🔍 Снова", "search_start"), markup.Data("🏠 В меню", "menu")),
 		)
-		return c.Edit("🔍 <b>Поиск</b>\n\nНичего не найдено по запросу «<i>"+escapeHTML(query)+"</i>».", markup, tb.ModeHTML)
+		return "🔍 <b>Поиск</b>\n\nНичего не найдено по запросу «<i>" + escapeHTML(query) + "</i>».", markup, nil
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
-
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("🔍 <b>Поиск: «%s»</b>\n\n", escapeHTML(query)))
-	for _, e := range entries {
-		runes := []rune(e.Content)
-		preview := string(runes)
-		if len(runes) > 50 {
-			preview = string(runes[:50]) + "..."
-		}
-		b.WriteString(fmt.Sprintf("#%d 📅 %s — <i>%s</i>\n",
-			e.ID, e.CreatedAt.Format("02.01.2006"), escapeHTML(preview)))
-	}
-	msg := b.String()
+	msg := fmt.Sprintf("🔍 <b>Поиск: «%s»</b>  %d/%d", escapeHTML(query), page, totalPages)
 
 	var rows []tb.Row
 
@@ -146,7 +144,7 @@ func (h *EntryHandler) showSearchResults(c tb.Context, uid int64, query string, 
 	rows = append(rows, markup.Row(markup.Data("🔍 Снова", "search_start"), markup.Data("🏠 В меню", "menu")))
 
 	markup.Inline(rows...)
-	return c.Edit(msg, markup, tb.ModeHTML)
+	return msg, markup, nil
 }
 
 // ── Settings ──────────────────────────────────────
@@ -226,9 +224,8 @@ func (h *EntryHandler) handleStart(c tb.Context) error {
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
-		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🔍 Поиск", "search_start")),
-		markup.Row(markup.Data("📋 Мои записи", "list", "1"), markup.Data("🎲 Сюрприз", "random")),
-		markup.Row(markup.Data("⚙️ Настройки", "settings")),
+		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🎲 Сюрприз", "random")),
+		markup.Row(markup.Data("📋 Мои записи", "list", "1"), markup.Data("⚙️ Настройки", "settings")),
 	)
 
 	return c.Send(msg, markup, tb.ModeHTML)
@@ -322,9 +319,8 @@ func (h *EntryHandler) handleMenu(c tb.Context) error {
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
-		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🔍 Поиск", "search_start")),
-		markup.Row(markup.Data("📋 Мои записи", "list", "1"), markup.Data("🎲 Сюрприз", "random")),
-		markup.Row(markup.Data("⚙️ Настройки", "settings")),
+		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🎲 Сюрприз", "random")),
+		markup.Row(markup.Data("📋 Мои записи", "list", "1"), markup.Data("⚙️ Настройки", "settings")),
 	)
 
 	return c.Edit("📔 <b>Дневник</b>\n\nТвой личный дневник в Telegram. Пиши записи, ищи их и получай напоминания.", markup, tb.ModeHTML)
