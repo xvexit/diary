@@ -80,9 +80,9 @@ func (r *PgSettings) GetUsersDueForReminder(ctx context.Context, now time.Time) 
 		 AND NOT EXISTS (
 		   SELECT 1 FROM entries e
 		   WHERE e.user_id = s.user_id
-		   AND e.created_at::DATE = $1::DATE
+		   AND e.created_at::DATE = $2::DATE
 		 )`,
-		now,
+		now, now,
 	)
 	if err != nil {
 		return nil, err

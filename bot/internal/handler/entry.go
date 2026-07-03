@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	tb "gopkg.in/telebot.v3"
@@ -33,42 +34,28 @@ func NewEntryHandler(svc *service.EntryService, settingsSvc *service.SettingsSer
 func (h *EntryHandler) Register() {
 	h.bot.Handle("/start", h.handleStart)
 	h.bot.Handle(tb.OnText, h.handleText)
-	h.bot.Handle(tb.OnCallback, func(c tb.Context) error {
-		data := c.Data()
-		switch {
-		case data == "new":
-			return h.answer(c, h.handleNewEntry(c))
-		case data == "cancel":
-			return h.answer(c, h.handleCancel(c))
-		case data == "menu":
-			return h.answer(c, h.handleMenu(c))
-		case data == "noop":
-			return h.answer(c, h.handleNoop(c))
-		case data == "random":
-			return h.answer(c, h.handleRandom(c))
-		case strings.HasPrefix(data, "list:"):
-			return h.answer(c, h.handleList(c))
-		case strings.HasPrefix(data, "view:"):
-			return h.answer(c, h.handleView(c))
-		case strings.HasPrefix(data, "edit:"):
-			return h.answer(c, h.handleEdit(c))
-		case strings.HasPrefix(data, "delete_yes:"):
-			return h.answer(c, h.handleDeleteExec(c))
-		case strings.HasPrefix(data, "delete:"):
-			return h.answer(c, h.handleDeleteConfirm(c))
-		case strings.HasPrefix(data, "search:"):
-			return h.answer(c, h.handleSearchResults(c))
-		case data == "search":
-			return h.answer(c, h.handleSearch(c))
-		case data == "settings":
-			return h.answer(c, h.handleSettings(c))
-		case data == "toggle_reminder":
-			return h.answer(c, h.handleToggleReminder(c))
-		case data == "change_time":
-			return h.answer(c, h.handleChangeTime(c))
-		}
-		return h.answer(c, nil)
-	})
+
+	h.bot.Handle(&tb.Btn{Unique: "new"}, h.answerAdapter(h.handleNewEntry))
+	h.bot.Handle(&tb.Btn{Unique: "cancel"}, h.answerAdapter(h.handleCancel))
+	h.bot.Handle(&tb.Btn{Unique: "menu"}, h.answerAdapter(h.handleMenu))
+	h.bot.Handle(&tb.Btn{Unique: "noop"}, h.answerAdapter(h.handleNoop))
+	h.bot.Handle(&tb.Btn{Unique: "random"}, h.answerAdapter(h.handleRandom))
+	h.bot.Handle(&tb.Btn{Unique: "list"}, h.answerAdapter(h.handleList))
+	h.bot.Handle(&tb.Btn{Unique: "view"}, h.answerAdapter(h.handleView))
+	h.bot.Handle(&tb.Btn{Unique: "edit"}, h.answerAdapter(h.handleEdit))
+	h.bot.Handle(&tb.Btn{Unique: "delete"}, h.answerAdapter(h.handleDeleteConfirm))
+	h.bot.Handle(&tb.Btn{Unique: "delete_yes"}, h.answerAdapter(h.handleDeleteExec))
+	h.bot.Handle(&tb.Btn{Unique: "search"}, h.answerAdapter(h.handleSearchResults))
+	h.bot.Handle(&tb.Btn{Unique: "search_start"}, h.answerAdapter(h.handleSearch))
+	h.bot.Handle(&tb.Btn{Unique: "settings"}, h.answerAdapter(h.handleSettings))
+	h.bot.Handle(&tb.Btn{Unique: "toggle_reminder"}, h.answerAdapter(h.handleToggleReminder))
+	h.bot.Handle(&tb.Btn{Unique: "change_time"}, h.answerAdapter(h.handleChangeTime))
+}
+
+func (h *EntryHandler) answerAdapter(next func(c tb.Context) error) tb.HandlerFunc {
+	return func(c tb.Context) error {
+		return h.answer(c, next(c))
+	}
 }
 
 // ── Search ───────────────────────────────────────
@@ -97,18 +84,15 @@ func (h *EntryHandler) performSearch(c tb.Context, query string) error {
 
 func (h *EntryHandler) handleSearchResults(c tb.Context) error {
 	uid := c.Sender().ID
-	var query string
-	var page int
-	fmt.Sscanf(c.Data(), "search:%s:%d", &query, &page)
-	if page < 1 {
-		page = 1
-	}
-	// rebuild query from data — scan splits on ':'
 	data := c.Data()
-	parts := strings.SplitN(data, ":", 3)
-	if len(parts) == 3 {
-		query = parts[1]
-		fmt.Sscanf(parts[2], "%d", &page)
+	parts := strings.SplitN(data, "|", 2)
+	query := parts[0]
+	page := 1
+	if len(parts) > 1 {
+		page, _ = strconv.Atoi(parts[1])
+		if page < 1 {
+			page = 1
+		}
 	}
 	return h.showSearchResults(c, uid, query, page)
 }
@@ -123,7 +107,7 @@ func (h *EntryHandler) showSearchResults(c tb.Context, uid int64, query string, 
 
 	if len(entries) == 0 {
 		markup.Inline(
-			markup.Row(markup.Data("🔍 Снова", "search"), markup.Data("🏠 В меню", "menu")),
+			markup.Row(markup.Data("🔍 Снова", "search_start"), markup.Data("🏠 В меню", "menu")),
 		)
 		return c.Edit("🔍 <b>Поиск</b>\n\nНичего не найдено по запросу «<i>"+escapeHTML(query)+"</i>».", markup, tb.ModeHTML)
 	}
@@ -147,18 +131,18 @@ func (h *EntryHandler) showSearchResults(c tb.Context, uid int64, query string, 
 
 	var navRow []tb.Btn
 	if page > 1 {
-		navRow = append(navRow, markup.Data("◀️", fmt.Sprintf("search:%s:%d", query, page-1)))
+		navRow = append(navRow, markup.Data("◀️", "search", query, strconv.Itoa(page-1)))
 	}
 	navRow = append(navRow, markup.Data(fmt.Sprintf("%d/%d", page, totalPages), "noop"))
 	if page < totalPages {
-		navRow = append(navRow, markup.Data("▶️", fmt.Sprintf("search:%s:%d", query, page+1)))
+		navRow = append(navRow, markup.Data("▶️", "search", query, strconv.Itoa(page+1)))
 	}
 	rows = append(rows, navRow)
 
 	for _, e := range entries {
-		rows = append(rows, markup.Row(markup.Data(fmt.Sprintf("#%d 👁 Просмотр", e.ID), fmt.Sprintf("view:%d", e.ID))))
+		rows = append(rows, markup.Row(markup.Data(fmt.Sprintf("#%d 👁 Просмотр", e.ID), "view", strconv.Itoa(e.ID))))
 	}
-	rows = append(rows, markup.Row(markup.Data("🔍 Снова", "search"), markup.Data("🏠 В меню", "menu")))
+	rows = append(rows, markup.Row(markup.Data("🔍 Снова", "search_start"), markup.Data("🏠 В меню", "menu")))
 
 	markup.Inline(rows...)
 	return c.Edit(msg, markup, tb.ModeHTML)
@@ -219,13 +203,12 @@ func (h *EntryHandler) handleChangeTime(c tb.Context) error {
 	return c.Edit("⏰ <b>Новое время</b>\n\nВведи время в формате <b>HH:MM</b> (например 21:00):", markup, tb.ModeHTML)
 }
 
-func parsePage(data string) int {
-	page := 1
-	fmt.Sscanf(data, "list:%d", &page)
-	if page < 1 {
-		page = 1
+func parseInt(data string, defaultVal int) int {
+	n, err := strconv.Atoi(data)
+	if err != nil || n < 1 {
+		return defaultVal
 	}
-	return page
+	return n
 }
 
 func escapeHTML(s string) string {
@@ -242,8 +225,8 @@ func (h *EntryHandler) handleStart(c tb.Context) error {
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
-		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🔍 Поиск", "search")),
-		markup.Row(markup.Data("📋 Мои записи", "list:1"), markup.Data("🎲 Сюрприз", "random")),
+		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🔍 Поиск", "search_start")),
+		markup.Row(markup.Data("📋 Мои записи", "list", "1"), markup.Data("🎲 Сюрприз", "random")),
 		markup.Row(markup.Data("⚙️ Настройки", "settings")),
 	)
 
@@ -267,9 +250,9 @@ func (h *EntryHandler) handleText(c tb.Context) error {
 		h.state.Reset(uid)
 
 		markup := &tb.ReplyMarkup{}
-		btnList := markup.Data("📋 К списку", "list:1")
-		btnMenu := markup.Data("🏠 В меню", "menu")
-		markup.Inline(markup.Row(btnList, btnMenu))
+		markup.Inline(
+			markup.Row(markup.Data("📋 К списку", "list", "1"), markup.Data("🏠 В меню", "menu")),
+		)
 
 		return c.Send(fmt.Sprintf("✅ Запись #%d сохранена!", entry.ID), markup, tb.ModeHTML)
 
@@ -285,9 +268,9 @@ func (h *EntryHandler) handleText(c tb.Context) error {
 		h.state.Reset(uid)
 
 		markup := &tb.ReplyMarkup{}
-		btnList := markup.Data("📋 К списку", "list:1")
-		btnMenu := markup.Data("🏠 В меню", "menu")
-		markup.Inline(markup.Row(btnList, btnMenu))
+		markup.Inline(
+			markup.Row(markup.Data("📋 К списку", "list", "1"), markup.Data("🏠 В меню", "menu")),
+		)
 
 		return c.Send("✅ Запись обновлена!", markup, tb.ModeHTML)
 
@@ -338,8 +321,8 @@ func (h *EntryHandler) handleMenu(c tb.Context) error {
 
 	markup := &tb.ReplyMarkup{}
 	markup.Inline(
-		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🔍 Поиск", "search")),
-		markup.Row(markup.Data("📋 Мои записи", "list:1"), markup.Data("🎲 Сюрприз", "random")),
+		markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🔍 Поиск", "search_start")),
+		markup.Row(markup.Data("📋 Мои записи", "list", "1"), markup.Data("🎲 Сюрприз", "random")),
 		markup.Row(markup.Data("⚙️ Настройки", "settings")),
 	)
 
@@ -347,7 +330,11 @@ func (h *EntryHandler) handleMenu(c tb.Context) error {
 }
 
 func (h *EntryHandler) answer(c tb.Context, err error) error {
-	c.Respond(&tb.CallbackResponse{})
+	if err != nil {
+		c.Respond(&tb.CallbackResponse{Text: "❌ " + err.Error()})
+	} else {
+		c.Respond(&tb.CallbackResponse{})
+	}
 	return err
 }
 
@@ -357,7 +344,7 @@ func (h *EntryHandler) handleNoop(c tb.Context) error {
 
 func (h *EntryHandler) handleList(c tb.Context) error {
 	uid := c.Sender().ID
-	page := parsePage(c.Data())
+	page := parseInt(c.Data(), 1)
 
 	entries, total, err := h.svc.ListByUser(context.Background(), uid, page, pageSize)
 	if err != nil {
@@ -393,16 +380,16 @@ func (h *EntryHandler) handleList(c tb.Context) error {
 
 	var navRow []tb.Btn
 	if page > 1 {
-		navRow = append(navRow, markup.Data("◀️", fmt.Sprintf("list:%d", page-1)))
+		navRow = append(navRow, markup.Data("◀️", "list", strconv.Itoa(page-1)))
 	}
 	navRow = append(navRow, markup.Data(fmt.Sprintf("%d/%d", page, totalPages), "noop"))
 	if page < totalPages {
-		navRow = append(navRow, markup.Data("▶️", fmt.Sprintf("list:%d", page+1)))
+		navRow = append(navRow, markup.Data("▶️", "list", strconv.Itoa(page+1)))
 	}
 	rows = append(rows, navRow)
 
 	for _, e := range entries {
-		rows = append(rows, markup.Row(markup.Data(fmt.Sprintf("#%d 👁 Просмотр", e.ID), fmt.Sprintf("view:%d", e.ID))))
+		rows = append(rows, markup.Row(markup.Data(fmt.Sprintf("#%d 👁 Просмотр", e.ID), "view", strconv.Itoa(e.ID))))
 	}
 
 	rows = append(rows, markup.Row(markup.Data("📝 Новая запись", "new"), markup.Data("🏠 В меню", "menu")))
@@ -414,8 +401,7 @@ func (h *EntryHandler) handleList(c tb.Context) error {
 
 func (h *EntryHandler) handleView(c tb.Context) error {
 	uid := c.Sender().ID
-	var id int
-	fmt.Sscanf(c.Data(), "view:%d", &id)
+	id, _ := strconv.Atoi(c.Data())
 
 	entry, err := h.svc.GetByID(context.Background(), uid, id)
 	if err != nil {
@@ -428,19 +414,23 @@ func (h *EntryHandler) handleView(c tb.Context) error {
 		entry.UpdatedAt.Format("02.01.2006 15:04"))
 
 	markup := &tb.ReplyMarkup{}
-	btnEdit := markup.Data("✏️ Редактировать", fmt.Sprintf("edit:%d", entry.ID))
-	btnDelete := markup.Data("🗑 Удалить", fmt.Sprintf("delete:%d", entry.ID))
-	btnBack := markup.Data("⬅️ Назад", "list:1")
-	btnMenu := markup.Data("🏠 В меню", "menu")
-	markup.Inline(markup.Row(btnEdit, btnDelete), markup.Row(btnBack, btnMenu))
+	markup.Inline(
+		markup.Row(
+			markup.Data("✏️ Редактировать", "edit", strconv.Itoa(entry.ID)),
+			markup.Data("🗑 Удалить", "delete", strconv.Itoa(entry.ID)),
+		),
+		markup.Row(
+			markup.Data("⬅️ Назад", "list", "1"),
+			markup.Data("🏠 В меню", "menu"),
+		),
+	)
 
 	return c.Edit(msg, markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) handleEdit(c tb.Context) error {
 	uid := c.Sender().ID
-	var id int
-	fmt.Sscanf(c.Data(), "edit:%d", &id)
+	id, _ := strconv.Atoi(c.Data())
 
 	entry, err := h.svc.GetByID(context.Background(), uid, id)
 	if err != nil {
@@ -460,21 +450,22 @@ func (h *EntryHandler) handleEdit(c tb.Context) error {
 }
 
 func (h *EntryHandler) handleDeleteConfirm(c tb.Context) error {
-	var id int
-	fmt.Sscanf(c.Data(), "delete:%d", &id)
+	id, _ := strconv.Atoi(c.Data())
 
 	markup := &tb.ReplyMarkup{}
-	btnYes := markup.Data("✅ Да, удалить", fmt.Sprintf("delete_yes:%d", id))
-	btnNo := markup.Data("❌ Нет", "list:1")
-	markup.Inline(markup.Row(btnYes, btnNo))
+	markup.Inline(
+		markup.Row(
+			markup.Data("✅ Да, удалить", "delete_yes", strconv.Itoa(id)),
+			markup.Data("❌ Нет", "list", "1"),
+		),
+	)
 
 	return c.Edit("🗑 <b>Точно удалить?</b>", markup, tb.ModeHTML)
 }
 
 func (h *EntryHandler) handleDeleteExec(c tb.Context) error {
 	uid := c.Sender().ID
-	var id int
-	fmt.Sscanf(c.Data(), "delete_yes:%d", &id)
+	id, _ := strconv.Atoi(c.Data())
 
 	err := h.svc.Delete(context.Background(), uid, id)
 	if err != nil {
@@ -482,9 +473,9 @@ func (h *EntryHandler) handleDeleteExec(c tb.Context) error {
 	}
 
 	markup := &tb.ReplyMarkup{}
-	btnList := markup.Data("📋 К списку", "list:1")
-	btnMenu := markup.Data("🏠 В меню", "menu")
-	markup.Inline(markup.Row(btnList, btnMenu))
+	markup.Inline(
+		markup.Row(markup.Data("📋 К списку", "list", "1"), markup.Data("🏠 В меню", "menu")),
+	)
 
 	return c.Edit("🗑 Запись удалена.", markup, tb.ModeHTML)
 }
@@ -501,10 +492,13 @@ func (h *EntryHandler) handleRandom(c tb.Context) error {
 		entry.ID, escapeHTML(entry.Content), entry.CreatedAt.Format("02.01.2006 15:04"))
 
 	markup := &tb.ReplyMarkup{}
-	btnView := markup.Data("👁 Просмотр", fmt.Sprintf("view:%d", entry.ID))
-	btnRandom := markup.Data("🎲 Ещё", "random")
-	btnMenu := markup.Data("🏠 В меню", "menu")
-	markup.Inline(markup.Row(btnView, btnRandom, btnMenu))
+	markup.Inline(
+		markup.Row(
+			markup.Data("👁 Просмотр", "view", strconv.Itoa(entry.ID)),
+			markup.Data("🎲 Ещё", "random"),
+			markup.Data("🏠 В меню", "menu"),
+		),
+	)
 
 	return c.Edit(msg, markup, tb.ModeHTML)
 }
