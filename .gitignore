@@ -1,0 +1,8 @@
+*
+!bot/
+!docs/
+!docs/superpowers/
+!docs/superpowers/specs/
+!docs/superpowers/plans/
+!.gitignore
+bot/.env
