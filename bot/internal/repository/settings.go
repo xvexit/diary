@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,16 +19,31 @@ type Settings interface {
 	Upsert(ctx context.Context, s *UserSettings) error
 	SetReminderEnabled(ctx context.Context, userID int64, enabled bool) error
 	SetReminderTime(ctx context.Context, userID int64, t string) error
-	GetUsersDueForReminder(ctx context.Context, now time.Time) ([]int64, error)
-	HasEntryToday(ctx context.Context, userID int64) (bool, error)
+	GetUsersDueForReminder(ctx context.Context) ([]int64, error)
+	HasEntryToday(ctx context.Context, userID int64, date time.Time) (bool, error)
 }
 
 type PgSettings struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	tables []string
 }
 
-func NewPgSettings(pool *pgxpool.Pool) *PgSettings {
-	return &PgSettings{pool: pool}
+func NewPgSettings(pool *pgxpool.Pool, diaryTables []string) *PgSettings {
+	return &PgSettings{pool: pool, tables: diaryTables}
+}
+
+// entryExistsSQL builds a query testing whether any diary table has a row for
+// the given user matching the date expression. userExpr references the user id
+// (e.g. "$1" or "s.user_id"); dateExpr is a SQL date expression.
+func (r *PgSettings) entryExistsSQL(userExpr, dateExpr string) string {
+	if len(r.tables) == 0 {
+		return "SELECT 1 WHERE false"
+	}
+	parts := make([]string, 0, len(r.tables))
+	for _, t := range r.tables {
+		parts = append(parts, "SELECT 1 FROM "+t+" WHERE user_id = "+userExpr+" AND created_at::DATE = "+dateExpr)
+	}
+	return strings.Join(parts, " UNION ALL ")
 }
 
 func (r *PgSettings) Get(ctx context.Context, userID int64) (*UserSettings, error) {
@@ -72,17 +88,12 @@ func (r *PgSettings) SetReminderTime(ctx context.Context, userID int64, t string
 	return err
 }
 
-func (r *PgSettings) GetUsersDueForReminder(ctx context.Context, now time.Time) ([]int64, error) {
+func (r *PgSettings) GetUsersDueForReminder(ctx context.Context) ([]int64, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT s.user_id FROM user_settings s
 		 WHERE s.reminder_enabled = true
-		 AND s.reminder_time <= $1::TIME
-		 AND NOT EXISTS (
-		   SELECT 1 FROM entries e
-		   WHERE e.user_id = s.user_id
-		   AND e.created_at::DATE = $2::DATE
-		 )`,
-		now, now,
+		 AND s.reminder_time <= LOCALTIME
+		 AND NOT EXISTS (`+r.entryExistsSQL("s.user_id", "CURRENT_DATE")+`)`,
 	)
 	if err != nil {
 		return nil, err
@@ -100,13 +111,36 @@ func (r *PgSettings) GetUsersDueForReminder(ctx context.Context, now time.Time) 
 	return ids, nil
 }
 
-func (r *PgSettings) HasEntryToday(ctx context.Context, userID int64) (bool, error) {
+type ReminderUser struct {
+	UserID       int64
+	ReminderTime string
+}
+
+func (r *PgSettings) GetAllReminderUsers(ctx context.Context) ([]ReminderUser, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT user_id, reminder_time::TEXT FROM user_settings
+		 WHERE reminder_enabled = true`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []ReminderUser
+	for rows.Next() {
+		var u ReminderUser
+		if err := rows.Scan(&u.UserID, &u.ReminderTime); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, nil
+}
+
+func (r *PgSettings) HasEntryToday(ctx context.Context, userID int64, date time.Time) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx,
-		`SELECT EXISTS (
-		   SELECT 1 FROM entries
-		   WHERE user_id = $1 AND created_at::DATE = CURRENT_DATE
-		 )`, userID,
+		`SELECT EXISTS (`+r.entryExistsSQL("$1", "$2::DATE")+`)`, userID, date,
 	).Scan(&exists)
 	return exists, err
 }

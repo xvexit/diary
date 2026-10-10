@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/user/dnevnik-bot/internal/model"
-	"github.com/user/dnevnik-bot/internal/repository"
+	"github.com/user/dnevnik-bot/internal/plugin"
 )
 
 var (
@@ -15,81 +15,121 @@ var (
 	ErrForbidden    = errors.New("access denied")
 )
 
+// EntryService routes every operation to the store of the diary it belongs to.
 type EntryService struct {
-	repo repository.Entry
+	registry *plugin.Registry
 }
 
-func NewEntryService(repo repository.Entry) *EntryService {
-	return &EntryService{repo: repo}
+func NewEntryService(registry *plugin.Registry) *EntryService {
+	return &EntryService{registry: registry}
 }
 
-func (s *EntryService) Create(ctx context.Context, userID int64, content string) (*model.Entry, error) {
-	content = strings.TrimSpace(content)
+func (s *EntryService) store(slug string) (plugin.DiaryPlugin, bool) {
+	return s.registry.Get(slug)
+}
+
+// buildContent produces the plain-text representation stored in the diary's
+// content column. It is used for search and backwards-compatible rendering.
+func buildContent(fields []model.EntryField) string {
+	parts := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if v := strings.TrimSpace(f.Value); v != "" {
+			parts = append(parts, v)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (s *EntryService) Create(ctx context.Context, userID int64, slug string, fields []model.EntryField) (*model.Entry, error) {
+	p, ok := s.store(slug)
+	if !ok {
+		return nil, ErrUnknownPlugin
+	}
+	if err := p.Validate(fields); err != nil {
+		return nil, err
+	}
+	content := buildContent(fields)
 	if content == "" {
 		return nil, ErrEmptyContent
 	}
-	return s.repo.Create(ctx, userID, content)
+	return p.Store().Create(ctx, userID, content, fields)
 }
 
-func (s *EntryService) GetByID(ctx context.Context, userID int64, id int) (*model.Entry, error) {
-	e, err := s.repo.GetByID(ctx, id)
+func (s *EntryService) GetByID(ctx context.Context, userID int64, slug string, id int) (*model.Entry, error) {
+	p, ok := s.store(slug)
+	if !ok {
+		return nil, ErrUnknownPlugin
+	}
+	e, err := p.Store().Get(ctx, userID, id)
 	if err != nil {
 		return nil, ErrNotFound
-	}
-	if e.UserID != userID {
-		return nil, ErrForbidden
 	}
 	return e, nil
 }
 
-func (s *EntryService) ListByUser(ctx context.Context, userID int64, page, pageSize int) ([]*model.Entry, int, error) {
+func (s *EntryService) List(ctx context.Context, userID int64, slug string, page, pageSize int) ([]*model.Entry, int, error) {
+	p, ok := s.store(slug)
+	if !ok {
+		return nil, 0, ErrUnknownPlugin
+	}
 	offset := (page - 1) * pageSize
-	entries, err := s.repo.ListByUser(ctx, userID, pageSize, offset)
+	entries, err := p.Store().List(ctx, userID, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}
-	total, err := s.repo.CountByUser(ctx, userID)
+	total, err := p.Store().Count(ctx, userID)
 	if err != nil {
 		return nil, 0, err
 	}
 	return entries, total, nil
 }
 
-func (s *EntryService) Update(ctx context.Context, userID int64, id int, content string) error {
-	content = strings.TrimSpace(content)
+func (s *EntryService) Update(ctx context.Context, userID int64, slug string, id int, fields []model.EntryField) error {
+	p, ok := s.store(slug)
+	if !ok {
+		return ErrUnknownPlugin
+	}
+	if _, err := p.Store().Get(ctx, userID, id); err != nil {
+		return ErrNotFound
+	}
+	if err := p.Validate(fields); err != nil {
+		return err
+	}
+	content := buildContent(fields)
 	if content == "" {
 		return ErrEmptyContent
 	}
-	e, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return ErrNotFound
-	}
-	if e.UserID != userID {
-		return ErrForbidden
-	}
-	return s.repo.Update(ctx, id, userID, content)
+	return p.Store().Update(ctx, userID, id, content, fields)
 }
 
-func (s *EntryService) Delete(ctx context.Context, userID int64, id int) error {
-	e, err := s.repo.GetByID(ctx, id)
-	if err != nil {
+func (s *EntryService) Delete(ctx context.Context, userID int64, slug string, id int) error {
+	p, ok := s.store(slug)
+	if !ok {
+		return ErrUnknownPlugin
+	}
+	if _, err := p.Store().Get(ctx, userID, id); err != nil {
 		return ErrNotFound
 	}
-	if e.UserID != userID {
-		return ErrForbidden
-	}
-	return s.repo.Delete(ctx, id, userID)
+	return p.Store().Delete(ctx, userID, id)
 }
 
-func (s *EntryService) Search(ctx context.Context, userID int64, query string, page, pageSize int) ([]*model.Entry, int, error) {
+func (s *EntryService) Search(ctx context.Context, userID int64, slug, query string, page, pageSize int) ([]*model.Entry, int, error) {
+	p, ok := s.store(slug)
+	if !ok {
+		return nil, 0, ErrUnknownPlugin
+	}
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, 0, ErrEmptyContent
 	}
 	offset := (page - 1) * pageSize
-	return s.repo.Search(ctx, userID, query, pageSize, offset)
+	return p.Store().Search(ctx, userID, query, pageSize, offset)
 }
 
-func (s *EntryService) RandomByUser(ctx context.Context, userID int64) (*model.Entry, error) {
-	return s.repo.RandomByUser(ctx, userID)
+func (s *EntryService) Random(ctx context.Context, userID int64, slug string) (*model.Entry, error) {
+	p, ok := s.store(slug)
+	if !ok {
+		return nil, ErrUnknownPlugin
+	}
+	return p.Store().Random(ctx, userID)
 }

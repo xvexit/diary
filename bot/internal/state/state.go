@@ -10,11 +10,23 @@ const (
 	Editing
 	Searching
 	ChangingTime
+	CreatingPluginEntry
+	CatalogSearching
 )
 
 type UserState struct {
 	State       State
 	EditEntryID int // used when Editing
+
+	// used when CreatingPluginEntry
+	PluginSlug string
+	FieldIndex int
+	Values     map[string]string
+	Selected   []string // in-progress multi-choice selection
+
+	// used by the diary catalogue
+	CatalogQuery string
+	CatalogPage  int
 }
 
 type Manager struct {
